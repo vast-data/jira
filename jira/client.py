@@ -641,55 +641,49 @@ class JIRA(object):
         next_items_page = self._get_items_from_page(item_type, items_key, resource)
         items = next_items_page
 
-        if True:  # isinstance(resource, dict):
+        if isinstance(resource, dict):
+            total = resource.get("total")
+            # 'isLast' is the optional key added to responses in Jira Agile 6.7.6. So far not used in basic Jira API.
+            is_last = resource.get("isLast", False)
+            start_at_from_response = resource.get("startAt", 0)
+            max_results_from_response = resource.get("maxResults", 1)
+        else:
+            # if is a list
+            total = None
+            is_last = False
+            start_at_from_response = startAt or 0
+            max_results_from_response = None
 
-            if isinstance(resource, dict):
-                total = resource.get("total")
-                # 'isLast' is the optional key added to responses in Jira Agile 6.7.6. So far not used in basic Jira API.
-                is_last = resource.get("isLast", False)
-                start_at_from_response = resource.get("startAt", 0)
-                max_results_from_response = resource.get("maxResults", 1)
-            else:
-                # if is a list
-                total = 1
-                is_last = True
-                start_at_from_response = 0
-                max_results_from_response = 1
-
-            # If maxResults evaluates as False, get all items in batches
-            if not maxResults:
-                page_size = max_results_from_response or len(items)
-                page_start = (startAt or start_at_from_response or 0) + page_size
-                if (
-                    async_class is not None
-                    and not is_last
-                    and (total is not None and len(items) < total)
-                ):
-                    async_fetches = []
-                    future_session = async_class(
-                        session=self._session, max_workers=async_workers
-                    )
-                    for start_index in range(page_start, total, page_size):
-                        page_params = params.copy()
-                        page_params["startAt"] = start_index
-                        page_params["maxResults"] = page_size
-                        url = self._get_url(request_path)
-                        r = future_session.get(url, params=page_params)
-                        async_fetches.append(r)
-                    for future in async_fetches:
-                        response = future.result()
-                        resource = json_loads(response)
-                        if resource:
-                            next_items_page = self._get_items_from_page(
-                                item_type, items_key, resource
-                            )
-                            items.extend(next_items_page)
-                while (
-                    async_class is None
-                    and not is_last
-                    and (total is None or page_start < total)
-                    and len(next_items_page) == page_size
-                ):
+        # If maxResults evaluates as False, get all items in batches
+        if not maxResults:
+            page_size = max_results_from_response or len(items)
+            page_start = (startAt or start_at_from_response or 0) + page_size
+            if (
+                async_class is not None
+                and not is_last
+                and (total is not None and len(items) < total)
+            ):
+                async_fetches = []
+                future_session = async_class(
+                    session=self._session, max_workers=async_workers
+                )
+                for start_index in range(page_start, total, page_size):
+                    page_params = params.copy()
+                    page_params["startAt"] = start_index
+                    page_params["maxResults"] = page_size
+                    url = self._get_url(request_path)
+                    r = future_session.get(url, params=page_params)
+                    async_fetches.append(r)
+                for future in async_fetches:
+                    response = future.result()
+                    resource = json_loads(response)
+                    if resource:
+                        next_items_page = self._get_items_from_page(
+                            item_type, items_key, resource
+                        )
+                        items.extend(next_items_page)
+            else:  # not async
+                while True:
                     page_params["startAt"] = page_start
                     page_params["maxResults"] = page_size
                     resource = self._get_json(
@@ -703,16 +697,13 @@ class JIRA(object):
                         page_start += page_size
                     else:
                         # if resource is an empty dictionary we assume no-results
+                        is_last = True
+                        total = len(items)
                         break
 
-            return ResultList(
-                items, start_at_from_response, max_results_from_response, total, is_last
-            )
-        else:
-            # it seams that search_users can return a list() containing a single user!
-            return ResultList(
-                [item_type(self._options, self._session, resource)], 0, 1, 1, True
-            )
+        return ResultList(
+            items, start_at_from_response, max_results_from_response, total, is_last
+        )
 
     def _get_items_from_page(self, item_type, items_key, resource):
         """
