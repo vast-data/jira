@@ -1305,15 +1305,21 @@ class JIRA(object):
         data = _field_worker(fields, **fieldargs)
 
         p = data["fields"]["project"]
-
-        if isinstance(p, str) or isinstance(p, int):
-            data["fields"]["project"] = {"id": self.project(p).id}
+        if isinstance(p, int):
+            project_id = p
+            data["fields"]["project"] = {"id": p}
+        elif isinstance(p, str):
+            project_id = self.project(p).id
+            data["fields"]["project"] = {"id": project_id}
+        else:
+            project_id = p['id']
 
         p = data["fields"]["issuetype"]
         if isinstance(p, int):
             data["fields"]["issuetype"] = {"id": p}
-        if isinstance(p, str) or isinstance(p, int):
-            data["fields"]["issuetype"] = {"id": self.issue_type_by_name(p).id}
+        elif isinstance(p, str):
+            issuetype_id = self.issue_type_by_name_and_project(p, project_id).id
+            data["fields"]["issuetype"] = {"id": issuetype_id}
 
         url = self._get_url("issue")
         r = self._session.post(url, data=json.dumps(data))
@@ -2143,6 +2149,30 @@ class JIRA(object):
         except IndexError:
             raise KeyError("Issue type '%s' is unknown." % name)
         return issue_type
+
+    def issue_type_by_name_and_project(self, name, project_id):
+        """
+        :param name: Name of the issue type
+        :type name: str
+        :param project_id: ID of the project
+        :type project_id: Union[int, str]
+        :rtype: IssueType
+        """
+        issue_types = self.issue_types()
+        unscoped = None
+        for it in issue_types:
+            if it.name != name:
+                continue
+            elif not hasattr(it, "scope"):
+                unscoped = it  # if we can't find something better, this will be it
+            elif it.scope.type != "PROJECT":
+                continue
+            elif int(it.scope.project.id) == int(project_id):
+                return it
+        if unscoped:
+            return unscoped
+
+        raise KeyError("Issue type '%s' is unknown for project '%s'" % (name, project_id))
 
     def request_types(self, service_desk):
         """ Returns request types supported by a service desk instance.
