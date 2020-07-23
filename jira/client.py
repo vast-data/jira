@@ -1349,17 +1349,23 @@ class JIRA(object):
         data = {"issueUpdates": []}
         for field_dict in field_list:
             issue_data = _field_worker(field_dict)
-            p = issue_data["fields"]["project"]
 
-            if isinstance(p, str) or isinstance(p, int):
-                issue_data["fields"]["project"] = {"id": self.project(p).id}
+            p = data["fields"]["project"]
+            if isinstance(p, int):
+                project_id = p
+                data["fields"]["project"] = {"id": p}
+            elif isinstance(p, str):
+                project_id = self.project(p).id
+                data["fields"]["project"] = {"id": project_id}
+            else:
+                project_id = p['id']
 
             p = issue_data["fields"]["issuetype"]
             if isinstance(p, int):
                 issue_data["fields"]["issuetype"] = {"id": p}
             if isinstance(p, str) or isinstance(p, int):
                 issue_data["fields"]["issuetype"] = {
-                    "id": self.issue_type_by_name(p).id
+                    "id": self.issue_type_by_name_and_project(p, project_id).id
                 }
 
             data["issueUpdates"].append(issue_data)
@@ -2868,6 +2874,30 @@ class JIRA(object):
             "includeInactive": includeInactive,
         }
         return self._fetch_pages(User, None, "user/search", startAt, maxResults, params)
+
+    def users(
+        self, startAt=0, maxResults=False, includeActive=True, includeInactive=False
+    ):
+        """Get all user Resources.
+
+        :param startAt: index of the first user to return.
+        :type startAt: int
+        :param maxResults: maximum number of users to return.
+                If maxResults evaluates as False, it will try to get all items in batches.
+        :type maxResults: Union[int, bool]
+        :param includeActive: If true, then active users are included in the results. (Default: True)
+        :type includeActive: bool
+        :param includeInactive: If true, then inactive users are included in the results. (Default: False)
+        :type includeInactive: bool
+
+
+        :rtype: ResultList
+        """
+        params = {
+            "includeActive": includeActive,
+            "includeInactive": includeInactive,
+        }
+        return self._fetch_pages(User, None, "users/search", startAt, maxResults, params)
 
     def search_allowed_users_for_issue(
         self, user, issueKey=None, projectKey=None, startAt=0, maxResults=50
