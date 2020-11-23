@@ -1271,7 +1271,7 @@ class JIRA(object):
         issue.find(id, params=params)
         return issue
 
-    def create_issue(self, fields=None, prefetch=True, **fieldargs):
+    def create_issue(self, fields=None, prefetch=True, raw=None, **fieldargs):
         """Create a new issue and return an issue Resource for it.
 
         Each keyword argument (other than the predefined ones) is treated as a field name and the argument's value
@@ -1294,6 +1294,8 @@ class JIRA(object):
         :rtype: Issue
         """
         data = _field_worker(fields, **fieldargs)
+        if raw:
+            data.update(raw)
 
         p = data["fields"]["project"]
         if isinstance(p, int):
