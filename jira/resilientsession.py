@@ -6,6 +6,7 @@ import logging
 import random
 from requests.exceptions import ConnectionError
 from requests import Session
+from threading import RLock
 import time
 
 from jira.exceptions import JIRAError
@@ -68,6 +69,13 @@ def raise_on_error(r, verb="???", **kwargs):
         pass
 
 
+def _with_my_lock(method):
+    def inner(self, *args, **kwargs):
+        with self.lock:
+            return method(self, *args, **kwargs)
+    return inner
+
+
 class ResilientSession(Session):
     """This class is supposed to retry requests that do return temporary errors.
 
@@ -76,6 +84,7 @@ class ResilientSession(Session):
 
     def __init__(self, timeout=None):
         self.max_retries = 3
+        self.lock = RLock()
         self.timeout = timeout
         super(ResilientSession, self).__init__()
 
@@ -96,12 +105,15 @@ class ResilientSession(Session):
                     response.__dict__,
                 )
             )
+
         if hasattr(response, "status_code"):
             if response.status_code in [502, 503, 504, 401]:
                 # 401 UNAUTHORIZED still randomly returned by Atlassian Cloud as of 2017-01-16
                 msg = "%s %s" % (response.status_code, response.reason)
                 # 2019-07-25: Disabled recovery for codes above^
                 return False
+            elif response.status_code == 429:
+                pass
             elif not (
                 response.status_code == 200
                 and len(response.content) == 0
@@ -123,6 +135,7 @@ class ResilientSession(Session):
         time.sleep(delay)
         return True
 
+    @_with_my_lock
     def __verb(self, verb, url, retry_data=None, **kwargs):
 
         d = self.headers.copy()
