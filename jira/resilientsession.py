@@ -82,8 +82,9 @@ class ResilientSession(Session):
     At this moment it supports: 502, 503, 504
     """
 
+    max_retries = 3
+
     def __init__(self, timeout=None):
-        self.max_retries = 3
         self.lock = RLock()
         self.timeout = timeout
         super(ResilientSession, self).__init__()
@@ -124,8 +125,8 @@ class ResilientSession(Session):
             else:
                 msg = "Atlassian's bug https://jira.atlassian.com/browse/JRA-41559"
 
-        # Exponential backoff with full jitter.
-        delay = min(60, 10 * 2 ** counter) * random.random()
+        # Exponential backoff with half jitter.
+        delay = min(60, 10 * 2 ** counter) * (0.5 + 0.5 * random.random())
         logging.warning(
             "Got recoverable error from %s %s, will retry [%s/%s] in %ss. Err: %s"
             % (request, url, counter, self.max_retries, delay, msg)
