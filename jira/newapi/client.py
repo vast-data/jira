@@ -112,7 +112,7 @@ class JiraClient():
     @cached_property
     def all_users(self):
         return SimpleObjectCollection(
-            (u for u in self.users() if hasattr(u, "emailAddress")),
+            (u for u in self.users(maxResults=500) if hasattr(u, "emailAddress")),
             ID_ATTRIBUTE="emailAddress", name="users")
 
     @safe_property
